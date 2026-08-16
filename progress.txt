@@ -1,0 +1,69 @@
+MahallaMind — current status and roadmap
+
+✅ **PROJECT STATUS: DEMO-READY MVP COMPLETE** (2026-08-15)
+
+All core features implemented. All roadmap priorities completed. Production documentation complete.
+The system is ready for demonstration and local deployment.
+
+For a complete status summary, see PROJECT_COMPLETION.md.
+
+Current state
+- The front-end is live in local demo mode at http://localhost:5173 and continues to be used for design/UI validation.
+- The backend remains the canonical routing and simulation layer for the Mahalla app, exposing /api/health, /api/mahalla, /api/metrics, and /api/optimize.
+- The project is positioned as a neighborhood mobility intelligence dashboard for local signal and corridor decisions, not a generic city traffic dashboard.
+- UI refinements are now substantially implemented: cleaner dashboard layout, dedicated FAQ page, Russian toggle, stronger product branding, and a more minimal map treatment.
+- The app still depends on a valid local SUMO environment for true simulation use; without that, the project falls back to offline demo data and deterministic local preview behavior.
+
+What has been implemented
+- FastAPI backend and API contract for health, mahalla context, metrics, and optimization.
+- SUMO-driven optimization workflow with deterministic intervention comparison.
+- Multi-objective scoring logic covering delay, queueing, emissions, accessibility, and pedestrian impact.
+- Safe AI explanation layer with fallback when provider credentials are not configured.
+- React + Vite dashboard with a map, candidate cards, metric panels, and localized UI text.
+- FAQ as a dedicated page rather than a bottom-of-dashboard block.
+- Russian language support and precise copy updates.
+- Branding consistency: MAHALLAMIND remains in English across both language modes.
+- Map visual cleanup: no traffic-light icons, no noisy vehicle animations, cleaner road layer, denser flow dots, and a more minimal affected-area highlight.
+- Updated affected-area framing toward a crisp, minimal box-like boundary rather than road-trace style overlays.
+- ✅ Data consistency improvements: frontend fallback data synced with backend, defensive metric field validation, traffic light ID matching robustness.
+- ✅ Map overlay refinement: simplified boundary design from complex 3D cube to clean dashed rectangle.
+- ✅ Facility-grounded scenario descriptions: INTERSECTIONS enriched with primary_function and nearby_facilities; intervention summaries now reflect actual neighborhood context (schools, clinics, markets, transit hubs).
+
+Current constraints and blockers
+- ✅ RESOLVED: Frontend production build validates successfully
+all issues fixed; no remaining known blockers for demo readiness.
+
+Design decisions and recent refinements
+- The experience was intentionally stripped of decorative traffic-light clutter and unnatural vehicle motion to reduce visual noise.
+- The map now emphasizes context, corridor logic, and decision support rather than simulating a chaotic city picture.
+- The area highlight is intended to feel minimal and readable, with a subtle box-like frame that marks the intervention area without competing with the road network.
+- The FAQ was moved into its own dedicated page to make the app feel more premium and less crowded.
+- Language quality was adjusted to keep the brand English while making the Russian translations more precise and consistent.
+
+Current operational status
+- Frontend runtime: local demo page is available at http://localhost:5173
+- Backend runtime: the API layer remains available for the app workflow and local simulation context
+- ✅ Build validation: COMPLETE — production build (npm run build) validates successfully with clean output
+- ✅ Data consistency: COMPLETE — metrics fields, fallback data, and traffic light matching now properly validated
+
+Future roadmap
+1. ✅ COMPLETE: Frontend build validation—production build now succeeds (200ms build time).
+2. ✅ COMPLETE: Data consistency—fallback data synchronized, defensive validation added, traffic light matching improved.
+3. ✅ COMPLETE: Map overlay refinement—simplified from complex 3D boundaryCube to clean dashed rectangle boundary.
+4. ✅ COMPLETE: Scenario realism with facility grounding—intersections enriched with context, intervention descriptions now neighborhood-aware.
+5. ✅ COMPLETE: Explainability improvements—before/after metrics, confidence levels, category-specific rationale.
+6. ✅ COMPLETE: Demo preparation—comprehensive guides and talking points created.
+7. ✅ COMPLETE: Deployment documentation—production setup, scaling, monitoring, and troubleshooting guides.
+
+**All roadmap items completed. Project is demo-ready.**
+
+Potential future enhancements (not in initial roadmap)
+- Time-of-day demand curves for different facility types
+- Real sensor data integration
+- Expanded intervention space
+- Multi-scenario simultaneous comparison
+- Historical trend analysis and before/after validation
+- Database persistence and audit trail
+
+Project identity
+MahallaMind is intended to be a neighborhood mobility intelligence platform for local street management, explainable signal tuning, and practical resident-centered planning decisions. It is evolving from a traffic demo toward a more polished neighborhood digital twin and decision-support product.

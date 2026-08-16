@@ -1,0 +1,14 @@
+.venv/
+venv/
+.codex_pydeps*/
+__pycache__/
+*.pyc
+*.log
+.ollama/
+.env
+.env.*
+!.env.example
+node_modules/
+frontend/node_modules/
+backend/.pytest_cache/
+.DS_Store
