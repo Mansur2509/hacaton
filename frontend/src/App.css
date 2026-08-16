@@ -175,6 +175,43 @@ button:disabled {
   background: linear-gradient(180deg, #eef4f8 0%, #f7fbff 100%);
 }
 
+.map-change-caption {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.55fr) minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.78rem 0.9rem;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.map-change-caption span {
+  display: block;
+  color: #b45309;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.map-change-caption strong {
+  display: block;
+  margin-top: 0.18rem;
+  color: #0f172a;
+}
+
+.map-change-caption p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.45;
+}
+
+.map-change-caption b {
+  color: #0f766e;
+}
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -364,6 +401,110 @@ button:disabled {
   font-size: 0.76rem;
   font-style: normal;
   font-weight: 900;
+}
+
+.strategy-comparison {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0 0 1rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.76);
+}
+
+.strategy-comparison-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.strategy-comparison-head h4 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.strategy-comparison-head span {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.strategy-table-wrap {
+  overflow-x: auto;
+}
+
+.strategy-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.strategy-table th,
+.strategy-table td {
+  padding: 0.58rem 0.5rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.strategy-table th {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.strategy-table tbody tr.selected {
+  background: rgba(204, 251, 241, 0.42);
+}
+
+.table-strategy-button {
+  display: grid;
+  gap: 0.14rem;
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  text-align: left;
+}
+
+.table-strategy-button:hover {
+  transform: none;
+}
+
+.table-strategy-button span {
+  color: #0f766e;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.table-strategy-button strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+
+.metric-delta {
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.metric-delta.good {
+  color: #0f766e;
+}
+
+.metric-delta.warn {
+  color: #b45309;
 }
 
 .meter {
@@ -601,6 +742,73 @@ button:disabled {
 }
 
 .bar-track.positive span {
+  background: linear-gradient(90deg, #0f766e, #22c55e);
+}
+
+.eco-bar-list {
+  display: grid;
+  gap: 0.62rem;
+  margin: 0.8rem 0;
+}
+
+.eco-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.eco-row > span {
+  color: #0f172a;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.eco-bars {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.eco-bar-line {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 74px;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.eco-bar-line small {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.eco-bar-line strong {
+  color: #0f172a;
+  font-size: 0.72rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.eco-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.eco-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.eco-track.before span {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+}
+
+.eco-track.after span {
   background: linear-gradient(90deg, #0f766e, #22c55e);
 }
 
@@ -980,6 +1188,7 @@ button:disabled {
   .executive-grid,
   .decision-layout,
   .strategy-grid,
+  .map-change-caption,
   .demo-feature-grid {
     grid-template-columns: 1fr;
   }
@@ -1023,6 +1232,15 @@ button:disabled {
 
   .presentation-actions button {
     flex: 1;
+  }
+
+  .strategy-comparison-head {
+    display: grid;
+    align-items: start;
+  }
+
+  .eco-row {
+    grid-template-columns: 1fr;
   }
 }
 

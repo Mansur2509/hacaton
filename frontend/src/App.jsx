@@ -119,6 +119,15 @@ const translations = {
     severity: 'Severity',
     affectedPlaces: 'Affected places',
     topStrategies: 'Top-3 strategies',
+    strategyComparison: 'Top-3 comparison',
+    strategy: 'Strategy',
+    targetZone: 'Target zone',
+    launch: 'Launch',
+    ecologyBeforeAfter: 'Ecology before / after',
+    before: 'Before',
+    after: 'After',
+    mapChange: 'Map change',
+    appliesHere: 'is applied here',
     chooseStrategy: 'Select',
     optimizationIndex: 'Optimization index',
     dataQuality: 'Data quality',
@@ -273,6 +282,15 @@ const translations = {
     severity: 'Нагрузка',
     affectedPlaces: 'Затронутые места',
     topStrategies: 'Top-3 стратегии',
+    strategyComparison: 'Сравнение top-3',
+    strategy: 'Стратегия',
+    targetZone: 'Целевая зона',
+    launch: 'Запуск',
+    ecologyBeforeAfter: 'Экология до / после',
+    before: 'До',
+    after: 'После',
+    mapChange: 'Изменение на карте',
+    appliesHere: 'применяется здесь',
     chooseStrategy: 'Выбрать',
     optimizationIndex: 'Индекс оптимизации',
     dataQuality: 'Качество данных',
@@ -531,6 +549,70 @@ const buildFactorRows = (t, scores = {}) => ([
   { key: 'feasibility', label: t.feasibilityFactor, value: scores.feasibility ?? 0 },
   { key: 'reliability', label: t.reliabilityFactor, value: scores.reliability ?? 0 },
 ])
+
+const buildStrategyComparisonRows = (strategies, candidates) => {
+  const candidateMap = new Map(
+    ensureList(candidates)
+      .map((candidate) => ensureCandidate(candidate))
+      .filter(Boolean)
+      .map((candidate) => [candidate.id, candidate]),
+  )
+
+  return ensureList(strategies)
+    .map((strategy, index) => {
+      const candidate = candidateMap.get(strategy.candidate_id)
+      if (!candidate) return null
+
+      return {
+        id: candidate.id,
+        rank: index + 1,
+        title: strategy.title || candidate.category_label || candidate.category || '',
+        label: strategy.label || candidate.label || candidate.id,
+        waitDelta: candidate.delta.average_waiting_seconds,
+        co2Delta: candidate.delta.co2_kg,
+        safety: candidate.factor_scores.safety ?? 0,
+        access: candidate.factor_scores.access ?? 0,
+        launchDays: candidate.implementation.days ?? 10,
+        targetZoneId: candidate.target_zone_id,
+      }
+    })
+    .filter(Boolean)
+}
+
+const numberOrZero = (value) => {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : 0
+}
+
+const buildEcologyRows = (t, layer) => {
+  if (!layer) return []
+  const baseline = layer.baseline || {}
+  const optimized = layer.optimized || {}
+
+  return [
+    {
+      key: 'co2',
+      label: 'CO2',
+      before: numberOrZero(baseline.co2_kg),
+      after: numberOrZero(optimized.co2_kg),
+      unit: 'kg',
+    },
+    {
+      key: 'nox',
+      label: 'NOx',
+      before: numberOrZero(baseline.nox_g),
+      after: numberOrZero(optimized.nox_g),
+      unit: 'g',
+    },
+    {
+      key: 'noise',
+      label: t.noiseFactor,
+      before: numberOrZero(baseline.noise_db),
+      after: numberOrZero(optimized.noise_db),
+      unit: 'dB',
+    },
+  ]
+}
 
 const calculateCitizenImpact = (baseline, candidate, impact, facilityCount) => {
   const observedVehicles = Math.max(1, baseline.max_vehicle_count || 1)
@@ -802,8 +884,18 @@ function App() {
   const problemZones = useMemo(() => ensureList(optResult?.problem_zones), [optResult])
   const topProblemZones = useMemo(() => problemZones.slice(0, 3), [problemZones])
   const topStrategies = useMemo(() => ensureList(optResult?.top_strategies), [optResult])
+  const rankedCandidates = useMemo(() => ensureList(optResult?.ranked_candidates), [optResult])
+  const strategyComparisonRows = useMemo(
+    () => buildStrategyComparisonRows(topStrategies, rankedCandidates),
+    [rankedCandidates, topStrategies],
+  )
   const dataQuality = optResult?.data_quality || null
   const environmentLayer = optResult?.environment_layer || null
+  const ecologyRows = useMemo(() => buildEcologyRows(t, environmentLayer), [environmentLayer, t])
+  const selectedTargetZone = useMemo(() => {
+    const targetId = selectedCandidate?.target_zone_id || selectedId
+    return problemZones.find((zone) => zone.id === targetId) || null
+  }, [problemZones, selectedCandidate, selectedId])
   const citizenImpact = useMemo(
     () => calculateCitizenImpact(baselineForDecision, selectedCandidate, executiveImpact, mahalla?.facilities?.length || 0),
     [baselineForDecision, executiveImpact, mahalla?.facilities?.length, selectedCandidate],
@@ -857,6 +949,13 @@ function App() {
 
   const handlePrintBrief = () => {
     window.print()
+  }
+
+  const getTargetZoneLabel = (zoneId) => {
+    if (!zoneId) return '-'
+    const zone = problemZones.find((item) => item.id === zoneId)
+      || mahalla?.intersections?.find((item) => item.id === zoneId)
+    return zone ? getLocalizedName(language, 'intersections', zone) : zoneId
   }
 
   const handleStressTest = async () => {
@@ -1020,26 +1119,30 @@ function App() {
             />
           ))}
 
-          {problemZones.map((zone) => (
-            <CircleMarker
-              key={`problem-${zone.id}`}
-              center={zone.coords}
-              radius={10 + clamp(zone.severity || 0, 0, 100) / 10}
-              pathOptions={{
-                color: zone.id === selectedId ? '#991b1b' : '#ef4444',
-                fillColor: '#f97316',
-                fillOpacity: 0.18 + clamp(zone.severity || 0, 0, 100) / 220,
-                weight: zone.id === selectedId ? 3 : 1.5,
-              }}
-              eventHandlers={{ click: () => setSelectedId(zone.id) }}
-            >
-              <Popup>
-                <strong>{getLocalizedName(language, 'intersections', zone)}</strong><br />
-                {zone.primary_issue_label}<br />
-                {t.severity}: {Math.round(zone.severity || 0)}
-              </Popup>
-            </CircleMarker>
-          ))}
+          {problemZones.map((zone) => {
+            const isTargetZone = selectedCandidate?.target_zone_id === zone.id
+            const isSelectedZone = zone.id === selectedId
+            return (
+              <CircleMarker
+                key={`problem-${zone.id}`}
+                center={zone.coords}
+                radius={10 + clamp(zone.severity || 0, 0, 100) / 10}
+                pathOptions={{
+                  color: isTargetZone ? '#7f1d1d' : isSelectedZone ? '#991b1b' : '#ef4444',
+                  fillColor: isTargetZone ? '#dc2626' : '#f97316',
+                  fillOpacity: 0.18 + clamp(zone.severity || 0, 0, 100) / 220,
+                  weight: isTargetZone ? 3.6 : isSelectedZone ? 3 : 1.5,
+                }}
+                eventHandlers={{ click: () => setSelectedId(zone.id) }}
+              >
+                <Popup>
+                  <strong>{getLocalizedName(language, 'intersections', zone)}</strong><br />
+                  {zone.primary_issue_label}<br />
+                  {t.severity}: {Math.round(zone.severity || 0)}
+                </Popup>
+              </CircleMarker>
+            )
+          })}
 
           {mahalla.facilities.map((facility) => (
             <CircleMarker
@@ -1084,6 +1187,15 @@ function App() {
             )
           })}
         </MapContainer>
+        {selectedCandidate && selectedTargetZone ? (
+          <div className="map-change-caption">
+            <div>
+              <span>{t.mapChange}</span>
+              <strong>{getLocalizedName(language, 'intersections', selectedTargetZone)}</strong>
+            </div>
+            <p><b>{selectedCandidate.label || selectedCandidate.id}</b> {t.appliesHere}</p>
+          </div>
+        ) : null}
       </div>
 
       <aside className="sidebar">
@@ -1247,6 +1359,58 @@ function App() {
                   </div>
                 ) : null}
 
+                {strategyComparisonRows.length ? (
+                  <div className="strategy-comparison">
+                    <div className="strategy-comparison-head">
+                      <h4>{t.strategyComparison}</h4>
+                      <span>{t.targetZone}</span>
+                    </div>
+                    <div className="strategy-table-wrap">
+                      <table className="strategy-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>{t.strategy}</th>
+                            <th>{t.targetZone}</th>
+                            <th>{t.deltaWait}</th>
+                            <th>CO2</th>
+                            <th>{t.safetyFactor}</th>
+                            <th>{t.accessFactor}</th>
+                            <th>{t.launch}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {strategyComparisonRows.map((row) => (
+                            <tr key={row.id} className={selectedCandidate?.id === row.id ? 'selected' : ''}>
+                              <td>{row.rank}</td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="table-strategy-button"
+                                  onClick={() => selectCandidate(row.id)}
+                                >
+                                  <span>{row.title}</span>
+                                  <strong>{row.label}</strong>
+                                </button>
+                              </td>
+                              <td>{getTargetZoneLabel(row.targetZoneId)}</td>
+                              <td className={row.waitDelta <= 0 ? 'metric-delta good' : 'metric-delta warn'}>
+                                {formatSigned(row.waitDelta, 1)} s
+                              </td>
+                              <td className={row.co2Delta <= 0 ? 'metric-delta good' : 'metric-delta warn'}>
+                                {formatSigned(row.co2Delta, 1)} kg
+                              </td>
+                              <td>{Math.round(clamp(row.safety, 0, 100))}</td>
+                              <td>{Math.round(clamp(row.access, 0, 100))}</td>
+                              <td>{row.launchDays} {language === 'ru' ? 'дней' : 'days'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="decision-layout">
                   <div className="decision-copy">
                     <h4>{t.businessCase}</h4>
@@ -1348,6 +1512,34 @@ function App() {
                         <div><span>{t.noiseFactor}</span><strong>{Math.max(0, environmentLayer.delta?.noise_db || 0).toFixed(1)} dB</strong></div>
                         <div><span>{t.idleProxy}</span><strong>{Math.max(0, environmentLayer.delta?.idle_seconds_proxy || 0).toFixed(0)} s</strong></div>
                       </div>
+                      {ecologyRows.length ? (
+                        <div className="eco-bar-list" aria-label={t.ecologyBeforeAfter}>
+                          {ecologyRows.map((row) => {
+                            const maxValue = Math.max(row.before, row.after, 1)
+                            return (
+                              <div className="eco-row" key={row.key}>
+                                <span>{row.label}</span>
+                                <div className="eco-bars">
+                                  <div className="eco-bar-line">
+                                    <small>{t.before}</small>
+                                    <div className="eco-track before">
+                                      <span style={{ width: `${clamp((row.before / maxValue) * 100, 4, 100)}%` }} />
+                                    </div>
+                                    <strong>{row.before.toFixed(1)} {row.unit}</strong>
+                                  </div>
+                                  <div className="eco-bar-line">
+                                    <small>{t.after}</small>
+                                    <div className="eco-track after">
+                                      <span style={{ width: `${clamp((row.after / maxValue) * 100, 4, 100)}%` }} />
+                                    </div>
+                                    <strong>{row.after.toFixed(1)} {row.unit}</strong>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : null}
                       <p>{environmentLayer.summary}</p>
                     </div>
                   ) : null}
