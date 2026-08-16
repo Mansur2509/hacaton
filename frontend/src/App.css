@@ -316,6 +316,56 @@ button:disabled {
   font-size: 1.2rem;
 }
 
+.strategy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.strategy-card {
+  min-height: 132px;
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: none;
+  text-align: left;
+}
+
+.strategy-card.selected {
+  border-color: rgba(15, 118, 110, 0.42);
+  background: linear-gradient(180deg, rgba(204, 251, 241, 0.34), rgba(255, 255, 255, 0.86));
+}
+
+.strategy-card span {
+  color: #0f766e;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.strategy-card strong {
+  color: #0f172a;
+  font-size: 0.96rem;
+}
+
+.strategy-card small {
+  color: #475569;
+  line-height: 1.4;
+}
+
+.strategy-card em {
+  color: #b45309;
+  font-size: 0.76rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
 .meter {
   width: 100%;
   height: 7px;
@@ -446,6 +496,8 @@ button:disabled {
 }
 
 .facility-impact-list > div,
+.problem-brief-list > div,
+.quality-list > div,
 .stress-list > div {
   display: flex;
   justify-content: space-between;
@@ -454,6 +506,7 @@ button:disabled {
 }
 
 .facility-impact-list strong,
+.quality-list strong,
 .stress-list strong {
   display: block;
   color: #0f172a;
@@ -468,6 +521,7 @@ button:disabled {
 }
 
 .facility-impact-list > div > span,
+.quality-list span,
 .stress-list span {
   flex: 0 0 auto;
   color: #0f766e;
@@ -595,6 +649,21 @@ button:disabled {
   font-size: 0.82rem;
 }
 
+.roadmap-row strong,
+.roadmap-row small {
+  display: block;
+}
+
+.roadmap-row strong {
+  color: #0f172a;
+  margin-bottom: 0.2rem;
+}
+
+.roadmap-row small {
+  color: #475569;
+  line-height: 1.45;
+}
+
 .pitch-card {
   background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(15, 118, 110, 0.88));
 }
@@ -687,6 +756,73 @@ button:disabled {
 
 .legend-swatch.facility {
   background: #10b981;
+}
+
+.legend-swatch.problem {
+  background: rgba(249, 115, 22, 0.82);
+  border-color: #ef4444;
+}
+
+.problem-zone-panel h3 {
+  margin-bottom: 0.75rem;
+}
+
+.problem-zone-list,
+.problem-brief-list,
+.quality-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.problem-zone-item {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.9);
+  box-shadow: none;
+  text-align: left;
+}
+
+.problem-zone-item.selected {
+  border-color: rgba(239, 68, 68, 0.42);
+  background: rgba(254, 242, 242, 0.9);
+}
+
+.problem-zone-item > span,
+.problem-brief-list > div > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.14);
+  color: #b45309;
+  font-weight: 900;
+  font-size: 0.82rem;
+}
+
+.problem-zone-item strong,
+.problem-zone-item small,
+.problem-brief-list strong,
+.problem-brief-list small {
+  display: block;
+}
+
+.problem-zone-item strong,
+.problem-brief-list strong {
+  color: #0f172a;
+  font-size: 0.86rem;
+}
+
+.problem-zone-item small,
+.problem-brief-list small {
+  color: #64748b;
+  font-size: 0.74rem;
 }
 
 .intersection-marker-wrap {
@@ -843,6 +979,7 @@ button:disabled {
   .candidate-list,
   .executive-grid,
   .decision-layout,
+  .strategy-grid,
   .demo-feature-grid {
     grid-template-columns: 1fr;
   }
@@ -895,6 +1032,7 @@ button:disabled {
   .results-panel,
   .candidate-list,
   .faq-grid,
+  .strategy-grid,
   .demo-feature-grid {
     grid-template-columns: 1fr;
   }
@@ -933,6 +1071,7 @@ button:disabled {
 
   .executive-grid,
   .decision-layout,
+  .strategy-grid,
   .demo-feature-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

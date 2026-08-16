@@ -41,6 +41,7 @@ def test_optimize_endpoint_returns_candidates_and_best():
     assert "best_candidate" in payload
     assert payload["best_candidate"]["id"]
     assert payload["best_candidate"]["category"]
+    assert payload["best_candidate"]["target_zone_id"]
     assert payload["best_candidate"]["score"] > 0
     assert set(payload["best_candidate"]["factor_scores"]) >= {
         "delay",
@@ -54,6 +55,11 @@ def test_optimize_endpoint_returns_candidates_and_best():
     }
     assert "co2_kg" in payload["baseline"]
     assert "accessibility_score" in payload["baseline"]
+    assert len(payload["problem_zones"]) >= 3
+    assert len(payload["top_strategies"]) == 3
+    assert payload["data_quality"]["confidence"] > 0
+    assert "co2_kg" in payload["environment_layer"]["delta"]
+    assert len(payload["product_roadmap"]) == 3
 
 
 def test_optimize_handles_ai_unavailable_fallback():

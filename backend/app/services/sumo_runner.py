@@ -443,6 +443,296 @@ def _candidate_score(factor_scores: dict[str, float], scenario: str) -> float:
     return round(sum(factor_scores.get(key, 0.0) * weight for key, weight in weights.items()), 2)
 
 
+def _localized_issue(issue: str, language: str) -> str:
+    labels = {
+        "queue_delay": ("Очереди и задержки", "Queue delay"),
+        "school_access": ("Доступ к школе", "School access"),
+        "clinic_access": ("Доступ к клинике", "Clinic access"),
+        "curb_friction": ("Бордюр и парковка", "Curb friction"),
+        "noise_exposure": ("Шум у жилья", "Residential noise"),
+        "transit_reliability": ("Надежность автобусов", "Transit reliability"),
+    }
+    ru, en = labels.get(issue, ("Локальная нагрузка", "Local pressure"))
+    return ru if language == "ru" else en
+
+
+def _build_problem_zones(
+    baseline: dict[str, Any],
+    intersections: list[dict[str, Any]],
+    facilities: list[dict[str, Any]],
+    scenario: str,
+    language: str,
+) -> list[dict[str, Any]]:
+    """Create deterministic corridor hotspots for the map and decision brief."""
+    facility_by_id = {item["id"]: item for item in facilities}
+    base_wait = float(baseline.get("average_waiting_seconds", 0.0) or 0.0)
+    base_speed = float(baseline.get("average_speed_kmh", 0.0) or 0.0)
+    base_co2 = float(baseline.get("co2_kg", 0.0) or 0.0)
+    base_noise = float(baseline.get("noise_db", 55.0) or 55.0)
+    base_access = float(baseline.get("accessibility_score", 100.0) or 100.0)
+    scenario_pressure = {"morning": 8.0, "evening": 6.0}.get(scenario, 3.0)
+    function_profile = {
+        "main_commercial_hub": ("queue_delay", 9.0),
+        "school_access": ("school_access", 12.0),
+        "health_facility_access": ("clinic_access", 10.0),
+        "market_curb_management": ("curb_friction", 11.0),
+        "residential_access": ("noise_exposure", 7.0),
+        "transit_priority": ("transit_reliability", 10.0),
+    }
+
+    zones: list[dict[str, Any]] = []
+    for index, item in enumerate(intersections):
+        issue, function_weight = function_profile.get(item.get("primary_function", ""), ("queue_delay", 6.0))
+        local_variation = (index % 3) * 2.5
+        severity = _bounded_score(
+            34.0
+            + base_wait * 1.25
+            + max(0.0, 32.0 - base_speed) * 0.85
+            + max(0.0, base_co2 - 18.0) * 0.22
+            + max(0.0, base_noise - 54.0) * 1.1
+            + max(0.0, 96.0 - base_access) * 0.55
+            + scenario_pressure
+            + function_weight
+            + local_variation
+        )
+        nearby = [facility_by_id[facility_id] for facility_id in item.get("nearby_facilities", []) if facility_id in facility_by_id]
+        if language == "ru":
+            summary = (
+                f"{_localized_issue(issue, language)}: зона чувствительна к задержкам, доступности и качеству среды. "
+                "Приоритет — мера без капитальной перестройки, которую можно проверить полевыми замерами."
+            )
+        else:
+            summary = (
+                f"{_localized_issue(issue, language)}: this zone is sensitive to delay, access, and local environmental quality. "
+                "Priority is a reversible intervention that can be validated with field counts."
+            )
+        zones.append({
+            "id": item["id"],
+            "name": item["name"],
+            "coords": item["coords"],
+            "severity": severity,
+            "primary_issue": issue,
+            "primary_issue_label": _localized_issue(issue, language),
+            "summary": summary,
+            "nearby_facilities": [
+                {"id": facility["id"], "type": facility["type"], "name": facility["name"], "coords": facility["coords"]}
+                for facility in nearby
+            ],
+        })
+
+    return sorted(zones, key=lambda zone: zone["severity"], reverse=True)
+
+
+def _strategy_reason(role: str, candidate: dict[str, Any], language: str) -> str:
+    scores = candidate.get("factor_scores", {})
+    if language == "ru":
+        reasons = {
+            "quick_pilot": f"Лучший быстрый пилот: высокий показатель внедрения {scores.get('feasibility', 0):.0f} и понятный откат.",
+            "max_impact": f"Максимальный общий эффект: индекс оптимизации {candidate.get('score', 0):.0f} по всем факторам.",
+            "safe_access": f"Лучший баланс безопасности и доступа: безопасность {scores.get('safety', 0):.0f}, доступность {scores.get('access', 0):.0f}.",
+        }
+    else:
+        reasons = {
+            "quick_pilot": f"Best quick pilot: feasibility {scores.get('feasibility', 0):.0f} with a reversible rollout.",
+            "max_impact": f"Maximum total impact: optimization index {candidate.get('score', 0):.0f} across all factors.",
+            "safe_access": f"Best safety-access balance: safety {scores.get('safety', 0):.0f}, access {scores.get('access', 0):.0f}.",
+        }
+    return reasons.get(role, candidate.get("selected_reason", ""))
+
+
+def _build_top_strategies(candidates: list[dict[str, Any]], language: str) -> list[dict[str, Any]]:
+    if not candidates:
+        return []
+
+    def by_factor(candidate: dict[str, Any], weights: dict[str, float]) -> float:
+        scores = candidate.get("factor_scores", {})
+        return sum(float(scores.get(key, 0.0) or 0.0) * weight for key, weight in weights.items())
+
+    profiles = [
+        (
+            "quick_pilot",
+            "Быстрый пилот" if language == "ru" else "Quick pilot",
+            lambda item: by_factor(item, {"feasibility": 0.48, "reliability": 0.22, "delay": 0.16, "emissions": 0.14}),
+        ),
+        (
+            "max_impact",
+            "Максимальный эффект" if language == "ru" else "Maximum impact",
+            lambda item: float(item.get("score", 0.0) or 0.0),
+        ),
+        (
+            "safe_access",
+            "Безопасность и доступ" if language == "ru" else "Safety and access",
+            lambda item: by_factor(item, {"safety": 0.38, "access": 0.32, "reliability": 0.18, "delay": 0.12}),
+        ),
+    ]
+
+    chosen: list[dict[str, Any]] = []
+    used_ids: set[str] = set()
+    for role, title, scorer in profiles:
+        available = [item for item in candidates if item["id"] not in used_ids] or candidates
+        candidate = max(available, key=scorer)
+        used_ids.add(candidate["id"])
+        chosen.append({
+            "role": role,
+            "title": title,
+            "candidate_id": candidate["id"],
+            "label": candidate.get("label", candidate["id"]),
+            "category_label": candidate.get("category_label", candidate.get("category", "")),
+            "score": round(float(scorer(candidate)), 2),
+            "optimization_index": candidate.get("score", 0),
+            "reason": _strategy_reason(role, candidate, language),
+            "implementation": candidate.get("implementation", {}),
+            "factor_scores": candidate.get("factor_scores", {}),
+        })
+
+    return chosen
+
+
+def _build_data_quality(baseline: dict[str, Any], candidates: list[dict[str, Any]], language: str) -> dict[str, Any]:
+    data_source = baseline.get("data_source", "sumo")
+    is_fallback = data_source == "demo_fallback"
+    confidence = 74 if is_fallback else 86
+    if language == "ru":
+        mode_label = "Калиброванная демо-модель" if is_fallback else "SUMO-симуляция"
+        status_ready = "готово"
+        status_needed = "нужно подтвердить"
+        notes = [
+            "Модель не заменяет полевые замеры: она помогает выбрать пилот до выезда команды.",
+            "После пилота нужно сверить фактические очереди, скорость и доступность.",
+        ]
+        inputs = [
+            {"label": "Сеть дорог SUMO", "status": status_ready},
+            {"label": "Сценарии пиков", "status": status_ready},
+            {"label": "Полевые замеры", "status": status_needed},
+            {"label": "Датчики качества воздуха", "status": "готово к подключению"},
+        ]
+    else:
+        mode_label = "Calibrated demo model" if is_fallback else "SUMO simulation"
+        status_ready = "ready"
+        status_needed = "needs validation"
+        notes = [
+            "The model does not replace field counts; it helps select a pilot before dispatch.",
+            "After pilot launch, validate queues, speeds, and access with observed data.",
+        ]
+        inputs = [
+            {"label": "SUMO road network", "status": status_ready},
+            {"label": "Peak scenarios", "status": status_ready},
+            {"label": "Field counts", "status": status_needed},
+            {"label": "Air-quality sensors", "status": "integration-ready"},
+        ]
+
+    return {
+        "mode": data_source,
+        "mode_label": mode_label,
+        "confidence": confidence,
+        "candidate_count": len(candidates),
+        "inputs": inputs,
+        "notes": notes,
+    }
+
+
+def _build_environment_layer(baseline: dict[str, Any], best: dict[str, Any], language: str) -> dict[str, Any]:
+    metrics = best.get("metrics", {}) if best else {}
+    baseline_wait = float(baseline.get("average_waiting_seconds", 0.0) or 0.0)
+    best_wait = float(metrics.get("average_waiting_seconds", baseline_wait) or 0.0)
+    baseline_count = float(baseline.get("max_vehicle_count", 0.0) or 0.0)
+    best_count = float(metrics.get("max_vehicle_count", baseline_count) or 0.0)
+    baseline_idle = round(baseline_wait * baseline_count, 1)
+    best_idle = round(best_wait * best_count, 1)
+    co2_delta = round(float(baseline.get("co2_kg", 0.0) or 0.0) - float(metrics.get("co2_kg", 0.0) or 0.0), 2)
+    nox_delta = round(float(baseline.get("nox_g", 0.0) or 0.0) - float(metrics.get("nox_g", 0.0) or 0.0), 2)
+    noise_delta = round(float(baseline.get("noise_db", 0.0) or 0.0) - float(metrics.get("noise_db", 0.0) or 0.0), 2)
+    idle_delta = round(baseline_idle - best_idle, 1)
+    summary = (
+        "Экологический слой уже считает CO2, NOx, шум и простой транспорта; внешние датчики можно подключить как следующий источник."
+        if language == "ru"
+        else "The environmental layer already tracks CO2, NOx, noise, and idling; external sensors can be added as the next data source."
+    )
+    return {
+        "summary": summary,
+        "baseline": {
+            "co2_kg": baseline.get("co2_kg", 0.0),
+            "nox_g": baseline.get("nox_g", 0.0),
+            "noise_db": baseline.get("noise_db", 0.0),
+            "idle_seconds_proxy": baseline_idle,
+        },
+        "optimized": {
+            "co2_kg": metrics.get("co2_kg", 0.0),
+            "nox_g": metrics.get("nox_g", 0.0),
+            "noise_db": metrics.get("noise_db", 0.0),
+            "idle_seconds_proxy": best_idle,
+        },
+        "delta": {
+            "co2_kg": co2_delta,
+            "nox_g": nox_delta,
+            "noise_db": noise_delta,
+            "idle_seconds_proxy": idle_delta,
+        },
+        "future_sources": ["IQAir", "HydroNet", "municipal sensors"],
+    }
+
+
+def _build_product_roadmap(language: str) -> list[dict[str, Any]]:
+    if language == "ru":
+        return [
+            {
+                "phase": "0-30 дней",
+                "title": "Пилот и замеры",
+                "items": ["Запустить выбранный коридор", "Сверить очереди и скорость", "Показать публичную карту эффекта"],
+            },
+            {
+                "phase": "31-60 дней",
+                "title": "Экология и доступ",
+                "items": ["Добавить слой воздуха и шума", "Сравнить школу, клинику, рынок и остановки", "Настроить правила отката"],
+            },
+            {
+                "phase": "61-90 дней",
+                "title": "Масштабирование",
+                "items": ["Подключить соседние махалли", "Сравнить бюджеты решений", "Собрать городской пакет KPI"],
+            },
+        ]
+
+    return [
+        {
+            "phase": "0-30 days",
+            "title": "Pilot and validation",
+            "items": ["Launch the selected corridor", "Validate queues and speed", "Publish the decision impact map"],
+        },
+        {
+            "phase": "31-60 days",
+            "title": "Environment and access",
+            "items": ["Add air and noise layer", "Compare school, clinic, market, and stops", "Define rollback rules"],
+        },
+        {
+            "phase": "61-90 days",
+            "title": "Scale-up",
+            "items": ["Connect neighboring mahallas", "Compare intervention budgets", "Build city KPI package"],
+        },
+    ]
+
+
+def _candidate_target_zone_id(entry: dict[str, Any], fallback_signal_id: str) -> str:
+    action_type = entry.get("type", "")
+    category = entry.get("category", "")
+    if action_type in {"school_zone_slowdown", "pedestrian_priority"}:
+        return "intersection_2"
+    if action_type in {"parking_turnover", "delivery_window"}:
+        return "intersection_4"
+    if action_type in {"bus_priority", "emergency_access_clearance"}:
+        return "intersection_6"
+    if action_type == "low_emission_timing":
+        return "intersection_5"
+    if category == "traffic_management":
+        return "intersection_1"
+
+    signal_id = str(entry.get("traffic_light_id") or fallback_signal_id or "")
+    if signal_id.startswith("cluster_"):
+        suffix = signal_id.split("_", 1)[1]
+        if suffix.isdigit():
+            return f"intersection_{max(1, min(6, int(suffix)))}"
+    return "intersection_1"
+
+
 def _generate_intervention_summary(
     entry: dict[str, Any],
     intersection_context: dict[str, Any] | None = None,
@@ -510,7 +800,7 @@ def _generate_intervention_summary(
 
 def optimize_interventions(steps: int = 300, scenario: str = "midday", language: str = "en") -> dict[str, Any]:
     """Run the real baseline and a broader, more diverse intervention set for neighborhood-level planning."""
-    from app.services.mahalla_data import INTERSECTIONS
+    from app.services.mahalla_data import FACILITIES, INTERSECTIONS
 
     language = _normalize_language(language)
     baseline = run_simulation(steps=steps, scenario=scenario)
@@ -591,11 +881,13 @@ def optimize_interventions(steps: int = 300, scenario: str = "midday", language:
             )
 
         factor_scores = _candidate_factor_scores(baseline, metrics, entry)
+        target_zone_id = _candidate_target_zone_id(entry, signal_id)
         candidate = {
             "id": f"{entry['type']}_{entry.get('seconds', 0)}s_{category}",
             "label": action_text,
             "category": category,
             "category_label": category_labels.get(category, category),
+            "target_zone_id": target_zone_id,
             "type": entry["type"],
             "description": summary,
             "summary": summary,
@@ -626,6 +918,7 @@ def optimize_interventions(steps: int = 300, scenario: str = "midday", language:
         if language == "ru"
         else "Selected because it delivers the strongest multi-factor balance: lower delay, higher throughput, lower emissions and noise, better safety and access, with a pilot that can be validated quickly."
     )
+    problem_zones = _build_problem_zones(baseline, INTERSECTIONS, FACILITIES, scenario, language)
 
     return {
         "scenario": scenario,
@@ -633,4 +926,9 @@ def optimize_interventions(steps: int = 300, scenario: str = "midday", language:
         "candidates": candidates,
         "ranked_candidates": ranked,
         "best_candidate": best,
+        "problem_zones": problem_zones,
+        "top_strategies": _build_top_strategies(ranked, language),
+        "data_quality": _build_data_quality(baseline, ranked, language),
+        "environment_layer": _build_environment_layer(baseline, best, language),
+        "product_roadmap": _build_product_roadmap(language),
     }

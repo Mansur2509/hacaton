@@ -115,6 +115,21 @@ const translations = {
     day60: '60 days',
     day90: '90 days',
     noStress: 'Run stress test to compare all peak scenarios.',
+    problemZones: 'Problem zones',
+    severity: 'Severity',
+    affectedPlaces: 'Affected places',
+    topStrategies: 'Top-3 strategies',
+    chooseStrategy: 'Select',
+    optimizationIndex: 'Optimization index',
+    dataQuality: 'Data quality',
+    modelConfidence: 'Model confidence',
+    dataInputs: 'Data inputs',
+    environmentLayer: 'Environment layer',
+    idleProxy: 'Idle proxy',
+    futureSources: 'Future sources',
+    downloadReport: 'Download report',
+    reportDownloaded: 'Report ready',
+    noProblemZones: 'Run optimization to map the highest-pressure zones.',
     faqPageTitle: 'Frequently asked questions',
     faqPageIntro: 'This page explains how the model works, what it measures, and how neighborhood-level decisions are evaluated in practice.',
     faqSections: [
@@ -254,6 +269,21 @@ const translations = {
     day60: '60 дней',
     day90: '90 дней',
     noStress: 'Запустите стресс-тест, чтобы сравнить все пиковые сценарии.',
+    problemZones: 'Проблемные зоны',
+    severity: 'Нагрузка',
+    affectedPlaces: 'Затронутые места',
+    topStrategies: 'Top-3 стратегии',
+    chooseStrategy: 'Выбрать',
+    optimizationIndex: 'Индекс оптимизации',
+    dataQuality: 'Качество данных',
+    modelConfidence: 'Уверенность модели',
+    dataInputs: 'Источники данных',
+    environmentLayer: 'Экологический слой',
+    idleProxy: 'Простой транспорта',
+    futureSources: 'Будущие источники',
+    downloadReport: 'Скачать отчет',
+    reportDownloaded: 'Отчет готов',
+    noProblemZones: 'Запустите оптимизацию, чтобы увидеть зоны с максимальной нагрузкой.',
     faqPageTitle: 'Часто задаваемые вопросы',
     faqPageIntro: 'Эта страница объясняет, как работает модель, какие показатели она оценивает и как принимаются решения на уровне района.',
     faqSections: [
@@ -406,6 +436,8 @@ const ensureCandidate = (candidate) => {
   }
 }
 
+const ensureList = (value) => (Array.isArray(value) ? value : [])
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
 const formatSigned = (value, digits = 1) => {
@@ -468,17 +500,25 @@ const calculateExecutiveImpact = (baseline, candidate) => {
 const buildPresentationBrief = ({ t, scenarioLabel, selectedCandidate, impact, optResult }) => {
   if (!selectedCandidate) return t.noBrief
 
+  const environment = optResult?.environment_layer
+  const quality = optResult?.data_quality
+  const strategyLines = ensureList(optResult?.top_strategies)
+    .map((item) => `${item.title}: ${item.label}`)
+    .join('\n')
+
   return [
     `MahallaMind — ${t.executiveDecision}`,
     `${t.scenario}: ${scenarioLabel}`,
     `${t.recommendedIntervention}: ${selectedCandidate.label || selectedCandidate.id}`,
+    strategyLines ? `${t.topStrategies}:\n${strategyLines}` : '',
     `${t.delayReduction}: ${Math.max(0, impact.waitingReductionSeconds).toFixed(1)} s (${Math.max(0, impact.waitingReductionPercent).toFixed(0)}%)`,
     `${t.emissionCut}: ${Math.max(0, impact.co2ReductionKg).toFixed(1)} kg (${Math.max(0, impact.co2ReductionPercent).toFixed(0)}%)`,
+    environment ? `NOx: ${Math.max(0, environment.delta?.nox_g || 0).toFixed(1)} g; ${t.idleProxy}: ${Math.max(0, environment.delta?.idle_seconds_proxy || 0).toFixed(0)} s` : '',
     `${t.accessGain}: ${formatSigned(impact.accessGain)} ${t.percentagePoints}`,
     `${t.speedGain}: ${formatSigned(impact.speedGain)} km/h`,
-    `${t.confidence}: ${optResult?.ai?.confidence || 'medium'}`,
+    `${t.confidence}: ${optResult?.ai?.confidence || 'medium'}${quality ? `; ${t.modelConfidence}: ${quality.confidence}%` : ''}`,
     `${t.decisionNeeded}: ${t.decisionNeededCopy}`,
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 }
 
 const buildFactorRows = (t, scores = {}) => ([
@@ -550,6 +590,7 @@ function App() {
   const [currentView, setCurrentView] = useState('dashboard')
   const [presentationMode, setPresentationMode] = useState(true)
   const [briefCopied, setBriefCopied] = useState(false)
+  const [reportDownloaded, setReportDownloaded] = useState(false)
   const [stressLoading, setStressLoading] = useState(false)
   const [scenarioResults, setScenarioResults] = useState([])
   const t = translations[language]
@@ -604,6 +645,20 @@ function App() {
 
   const targetSignalId = selectedCandidate?.intervention?.traffic_light_id || selectedIntersection?.traffic_light_ids?.[0] || null
 
+  const selectCandidate = (candidateId) => {
+    if (!candidateId || !optResult) return
+    const candidate = ensureCandidate(ensureList(optResult.ranked_candidates).find((item) => item.id === candidateId))
+    setSelectedCandidateId(candidateId)
+    const zoneMatch = candidate?.target_zone_id
+      ? mahalla?.intersections?.find((item) => item.id === candidate.target_zone_id)
+      : null
+    const signalMatch = getIntersectionForTrafficLight(candidate?.intervention?.traffic_light_id)
+    const match = zoneMatch || signalMatch
+    if (match) {
+      setSelectedId(match.id)
+    }
+  }
+
   const handleAnalyze = async () => {
     setLoading(true)
     setError('')
@@ -628,8 +683,11 @@ function App() {
       setMetrics(ensureMetrics(data.baseline || {}))
       setSelectedCandidateId(data.best_candidate?.id || null)
       setScenarioResults([])
-      const match = getIntersectionForTrafficLight(data.best_candidate?.intervention?.traffic_light_id)
-      setSelectedId(match?.id || 'intersection_1')
+      const zoneMatch = data.best_candidate?.target_zone_id
+        ? mahalla?.intersections?.find((item) => item.id === data.best_candidate.target_zone_id)
+        : null
+      const signalMatch = getIntersectionForTrafficLight(data.best_candidate?.intervention?.traffic_light_id)
+      setSelectedId(zoneMatch?.id || signalMatch?.id || 'intersection_1')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -741,6 +799,11 @@ function App() {
     () => buildFactorRows(t, selectedCandidate?.factor_scores || {}),
     [selectedCandidate, t],
   )
+  const problemZones = useMemo(() => ensureList(optResult?.problem_zones), [optResult])
+  const topProblemZones = useMemo(() => problemZones.slice(0, 3), [problemZones])
+  const topStrategies = useMemo(() => ensureList(optResult?.top_strategies), [optResult])
+  const dataQuality = optResult?.data_quality || null
+  const environmentLayer = optResult?.environment_layer || null
   const citizenImpact = useMemo(
     () => calculateCitizenImpact(baselineForDecision, selectedCandidate, executiveImpact, mahalla?.facilities?.length || 0),
     [baselineForDecision, executiveImpact, mahalla?.facilities?.length, selectedCandidate],
@@ -749,7 +812,8 @@ function App() {
     () => buildFacilityImpact({ language, impact: executiveImpact }),
     [executiveImpact, language],
   )
-  const roadmap = useMemo(() => buildRoadmap(language), [language])
+  const roadmap = useMemo(() => ensureList(optResult?.product_roadmap), [optResult])
+  const fallbackRoadmap = useMemo(() => buildRoadmap(language), [language])
   const pitchLines = useMemo(() => {
     if (language === 'ru') {
       return [
@@ -774,6 +838,21 @@ function App() {
     } catch {
       setError(t.copyUnavailable)
     }
+  }
+
+  const handleDownloadReport = () => {
+    if (!selectedCandidate) return
+    const blob = new Blob([presentationBriefText], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `mahallamind-${scenario}-decision-report.txt`
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+    setReportDownloaded(true)
+    window.setTimeout(() => setReportDownloaded(false), 1800)
   }
 
   const handlePrintBrief = () => {
@@ -941,6 +1020,27 @@ function App() {
             />
           ))}
 
+          {problemZones.map((zone) => (
+            <CircleMarker
+              key={`problem-${zone.id}`}
+              center={zone.coords}
+              radius={10 + clamp(zone.severity || 0, 0, 100) / 10}
+              pathOptions={{
+                color: zone.id === selectedId ? '#991b1b' : '#ef4444',
+                fillColor: '#f97316',
+                fillOpacity: 0.18 + clamp(zone.severity || 0, 0, 100) / 220,
+                weight: zone.id === selectedId ? 3 : 1.5,
+              }}
+              eventHandlers={{ click: () => setSelectedId(zone.id) }}
+            >
+              <Popup>
+                <strong>{getLocalizedName(language, 'intersections', zone)}</strong><br />
+                {zone.primary_issue_label}<br />
+                {t.severity}: {Math.round(zone.severity || 0)}
+              </Popup>
+            </CircleMarker>
+          ))}
+
           {mahalla.facilities.map((facility) => (
             <CircleMarker
               key={facility.id}
@@ -998,9 +1098,34 @@ function App() {
               <div className="legend-box">
                 <div><span className="legend-swatch signal" /> {t.selectedSignal}</div>
                 <div><span className="legend-swatch facility" /> {t.localFacility}</div>
+                <div><span className="legend-swatch problem" /> {t.problemZones}</div>
               </div>
               <p className="traffic-legend muted">{t.neighborhoodCopy}</p>
             </>
+          )}
+        </div>
+
+        <div className="panel-card problem-zone-panel">
+          <h3>{t.problemZones}</h3>
+          {topProblemZones.length ? (
+            <div className="problem-zone-list">
+              {topProblemZones.map((zone) => (
+                <button
+                  type="button"
+                  key={zone.id}
+                  className={`problem-zone-item ${selectedId === zone.id ? 'selected' : ''}`}
+                  onClick={() => setSelectedId(zone.id)}
+                >
+                  <span>{Math.round(zone.severity || 0)}</span>
+                  <div>
+                    <strong>{getLocalizedName(language, 'intersections', zone)}</strong>
+                    <small>{zone.primary_issue_label}</small>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="traffic-legend muted">{t.noProblemZones}</p>
           )}
         </div>
 
@@ -1063,6 +1188,9 @@ function App() {
                 <button type="button" onClick={handleCopyBrief} disabled={!selectedCandidate}>
                   {briefCopied ? t.copied : t.copyBrief}
                 </button>
+                <button type="button" onClick={handleDownloadReport} disabled={!selectedCandidate}>
+                  {reportDownloaded ? t.reportDownloaded : t.downloadReport}
+                </button>
                 <button type="button" className="ghost-print" onClick={handlePrintBrief}>
                   {t.printBrief}
                 </button>
@@ -1100,6 +1228,24 @@ function App() {
                     <strong>{dataModeLabel}</strong>
                   </div>
                 </div>
+
+                {topStrategies.length ? (
+                  <div className="strategy-grid">
+                    {topStrategies.map((strategy) => (
+                      <button
+                        type="button"
+                        key={strategy.role}
+                        className={`strategy-card ${selectedCandidate?.id === strategy.candidate_id ? 'selected' : ''}`}
+                        onClick={() => selectCandidate(strategy.candidate_id)}
+                      >
+                        <span>{strategy.title}</span>
+                        <strong>{strategy.label}</strong>
+                        <small>{strategy.reason}</small>
+                        <em>{t.optimizationIndex}: {Math.round(strategy.optimization_index || 0)}</em>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
 
                 <div className="decision-layout">
                   <div className="decision-copy">
@@ -1153,6 +1299,25 @@ function App() {
                     </div>
                   </div>
 
+                  <div className="demo-card problem-card">
+                    <h4>{t.problemZones}</h4>
+                    {topProblemZones.length ? (
+                      <div className="problem-brief-list">
+                        {topProblemZones.map((zone) => (
+                          <div key={zone.id}>
+                            <span>{Math.round(zone.severity || 0)}</span>
+                            <div>
+                              <strong>{getLocalizedName(language, 'intersections', zone)}</strong>
+                              <small>{zone.primary_issue_label}</small>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>{t.noProblemZones}</p>
+                    )}
+                  </div>
+
                   <div className="demo-card">
                     <h4>{t.beforeAfter}</h4>
                     <div className="comparison-bars">
@@ -1173,6 +1338,19 @@ function App() {
                       </div>
                     </div>
                   </div>
+
+                  {environmentLayer ? (
+                    <div className="demo-card environment-card">
+                      <h4>{t.environmentLayer}</h4>
+                      <div className="mini-kpis">
+                        <div><span>CO2</span><strong>{Math.max(0, environmentLayer.delta?.co2_kg || 0).toFixed(1)} kg</strong></div>
+                        <div><span>NOx</span><strong>{Math.max(0, environmentLayer.delta?.nox_g || 0).toFixed(1)} g</strong></div>
+                        <div><span>{t.noiseFactor}</span><strong>{Math.max(0, environmentLayer.delta?.noise_db || 0).toFixed(1)} dB</strong></div>
+                        <div><span>{t.idleProxy}</span><strong>{Math.max(0, environmentLayer.delta?.idle_seconds_proxy || 0).toFixed(0)} s</strong></div>
+                      </div>
+                      <p>{environmentLayer.summary}</p>
+                    </div>
+                  ) : null}
 
                   <div className="demo-card">
                     <h4>{t.citizenImpact}</h4>
@@ -1198,6 +1376,24 @@ function App() {
                       ))}
                     </div>
                   </div>
+
+                  {dataQuality ? (
+                    <div className="demo-card data-quality-card">
+                      <div className="demo-card-header">
+                        <h4>{t.dataQuality}</h4>
+                        <strong>{dataQuality.confidence}%</strong>
+                      </div>
+                      <p className="traffic-legend muted">{dataQuality.mode_label}</p>
+                      <div className="quality-list">
+                        {ensureList(dataQuality.inputs).map((item) => (
+                          <div key={item.label}>
+                            <strong>{item.label}</strong>
+                            <span>{item.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="demo-card passport-card">
                     <h4>{t.pilotPassport}</h4>
@@ -1243,12 +1439,21 @@ function App() {
 
                   <div className="demo-card roadmap-card">
                     <h4>{t.roadmapTitle}</h4>
-                    {[t.day30, t.day60, t.day90].map((label, index) => (
-                      <div key={label} className="roadmap-row">
-                        <span>{label}</span>
-                        <p>{roadmap[index]}</p>
-                      </div>
-                    ))}
+                    {roadmap.length ? (
+                      roadmap.map((item) => (
+                        <div key={item.phase} className="roadmap-row">
+                          <span>{item.phase}</span>
+                          <p><strong>{item.title}</strong><small>{ensureList(item.items).join(' · ')}</small></p>
+                        </div>
+                      ))
+                    ) : (
+                      [t.day30, t.day60, t.day90].map((label, index) => (
+                        <div key={label} className="roadmap-row">
+                          <span>{label}</span>
+                          <p>{fallbackRoadmap[index]}</p>
+                        </div>
+                      ))
+                    )}
                   </div>
 
                   <div className="demo-card pitch-card">
@@ -1335,13 +1540,7 @@ function App() {
                   key={candidate.id}
                   type="button"
                   className={`candidate-card ${selectedCandidate?.id === candidate.id ? 'selected' : ''}`}
-                  onClick={() => {
-                    setSelectedCandidateId(candidate.id)
-                    const match = getIntersectionForTrafficLight(candidate.intervention?.traffic_light_id)
-                    if (match) {
-                      setSelectedId(match.id)
-                    }
-                  }}
+                  onClick={() => selectCandidate(candidate.id)}
                 >
                   <div className="candidate-header">
                     <strong>{candidate.label || candidate.id}</strong>
